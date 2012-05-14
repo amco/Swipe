@@ -6,6 +6,12 @@
  *
 */
 
+var isTouch = ('ontouchstart' in document.documentElement);
+var pressEvent = isTouch ? "touchstart" : "mousedown";
+var panEvent =   isTouch ? "touchmove"  : "mousemove";
+var upEvent =   isTouch ? "touchend"  : "mouseup";
+var isDragging;
+
 window.Swipe = function(element, options) {
 
   // return immediately if element doesn't exist
@@ -36,9 +42,10 @@ window.Swipe = function(element, options) {
 
   // add event listeners
   if (this.element.addEventListener) {
-    this.element.addEventListener('touchstart', this, false);
-    this.element.addEventListener('touchmove', this, false);
-    this.element.addEventListener('touchend', this, false);
+    this.element.addEventListener(pressEvent, this, false);
+    this.element.addEventListener(panEvent, this, false);
+    this.element.addEventListener(upEvent, this, false);
+    (isTouch)?0:this.element.addEventListener('mouseout', this, false);
     this.element.addEventListener('webkitTransitionEnd', this, false);
     this.element.addEventListener('msTransitionEnd', this, false);
     this.element.addEventListener('oTransitionEnd', this, false);
@@ -79,7 +86,7 @@ Swipe.prototype = {
     }
 
     // set start position and force translate to remove initial flickering
-    this.slide(this.index, 0); 
+    this.slide(this.index, 0);
 
     // show slider element
     this.container.style.visibility = 'visible';
@@ -108,7 +115,7 @@ Swipe.prototype = {
   },
 
   getPos: function() {
-    
+
     // return current index position
     return this.index;
 
@@ -141,18 +148,18 @@ Swipe.prototype = {
     var _this = this;
 
     this.interval = (this.delay)
-      ? setTimeout(function() { 
+      ? setTimeout(function() {
         _this.next(_this.delay);
       }, this.delay)
       : 0;
-  
+
   },
-  
+
   stop: function() {
     this.delay = 0;
     clearTimeout(this.interval);
   },
-  
+
   resume: function() {
     this.delay = this.options.auto || 0;
     this.begin();
@@ -163,6 +170,10 @@ Swipe.prototype = {
       case 'touchstart': this.onTouchStart(e); break;
       case 'touchmove': this.onTouchMove(e); break;
       case 'touchend': this.onTouchEnd(e); break;
+      case 'mousedown': this.onTouchStart(e); break;
+      case 'mousemove': this.onTouchMove(e); break;
+      case 'mouseup': this.onTouchEnd(e); break;
+      case 'mouseout': this.onTouchEnd(e); break;
       case 'webkitTransitionEnd':
       case 'msTransitionEnd':
       case 'oTransitionEnd':
@@ -172,7 +183,7 @@ Swipe.prototype = {
   },
 
   transitionEnd: function(e) {
-    
+
     if (this.delay) this.begin();
 
     this.callback(e, this.index, this.slides[this.index]);
@@ -180,21 +191,36 @@ Swipe.prototype = {
   },
 
   onTouchStart: function(e) {
-    
+
+    var theEvent;
+
+    isDragging = true;
+
+    if (e.touches == undefined)
+    {
+      theEvent = e;
+    }
+    else
+    {
+      theEvent = e.touches[0];
+    }
+
     this.start = {
 
       // get touch coordinates for delta calculations in onTouchMove
-      pageX: e.touches[0].pageX,
-      pageY: e.touches[0].pageY,
+      pageX: theEvent.pageX,
+      pageY: theEvent.pageY,
 
       // set initial timestamp of touch sequence
       time: Number( new Date() )
 
     };
 
+    console.log(this.start);
+
     // used for testing first onTouchMove event
     this.isScrolling = undefined;
-    
+
     // reset deltaX
     this.deltaX = 0;
 
@@ -204,36 +230,50 @@ Swipe.prototype = {
   },
 
   onTouchMove: function(e) {
+    if(!isDragging) return;
 
     // ensure swiping with one touch and not pinching
-    if(e.touches.length > 1 || e.scale && e.scale !== 1) return;
+    if(e.touches && (e.touches.length > 1 || e.scale && e.scale !== 1)) return;
 
-    this.deltaX = e.touches[0].pageX - this.start.pageX;
+    var theEvent;
+
+    if (e.touches == undefined)
+    {
+      theEvent = e;
+    }
+    else
+    {
+      theEvent = e.touches[0];
+    }
+
+    console.log(this.start);
+
+    this.deltaX = theEvent.pageX - this.start.pageX;
 
     // determine if scrolling test has run - one time test
     if ( typeof this.isScrolling == 'undefined') {
-      this.isScrolling = !!( this.isScrolling || Math.abs(this.deltaX) < Math.abs(e.touches[0].pageY - this.start.pageY) );
+      this.isScrolling = !!( this.isScrolling || Math.abs(this.deltaX) < Math.abs(theEvent.pageY - this.start.pageY) );
     }
 
     // if user is not trying to scroll vertically
     if (!this.isScrolling) {
 
-      // prevent native scrolling 
+      // prevent native scrolling
       e.preventDefault();
 
       // cancel slideshow
       clearTimeout(this.interval);
 
       // increase resistance if first or last slide
-      this.deltaX = 
-        this.deltaX / 
+      this.deltaX =
+        this.deltaX /
           ( (!this.index && this.deltaX > 0               // if first slide and sliding left
             || this.index == this.length - 1              // or if last slide and sliding right
             && this.deltaX < 0                            // and if sliding at all
-          ) ?                      
+          ) ?
           ( Math.abs(this.deltaX) / this.width + 1 )      // determine resistance level
           : 1 );                                          // no resistance if false
-      
+
       // translate immediately 1-to-1
       this.element.style.MozTransform = this.element.style.webkitTransform = 'translate3d(' + (this.deltaX - this.index * this.width) + 'px,0,0)';
 
@@ -243,14 +283,16 @@ Swipe.prototype = {
 
   onTouchEnd: function(e) {
 
+    isDragging = false;
+
     // determine if slide attempt triggers next/prev slide
-    var isValidSlide = 
+    var isValidSlide =
           Number(new Date()) - this.start.time < 250      // if slide duration is less than 250ms
           && Math.abs(this.deltaX) > 20                   // and if slide amt is greater than 20px
           || Math.abs(this.deltaX) > this.width/2,        // or if slide amt is greater than half the width
 
     // determine if slide attempt is past start and end
-        isPastBounds = 
+        isPastBounds =
           !this.index && this.deltaX > 0                          // if first slide and slide amt is greater than 0
           || this.index == this.length - 1 && this.deltaX < 0;    // or if last slide and slide amt is less than 0
 

@@ -1,5 +1,6 @@
 # Swipe 1.0
 Swipe is a lightweight mobile slider with **1-to-1** touch movement. For more info read the [blog post](http://pr-i.me/AQL2).
+Edited by James Womack @ Amco to handle mouse events as well.
 
 ## Demo
 ### Visit here on a touch-enabled mobile device [swipejs.com](http://swipejs.com)
